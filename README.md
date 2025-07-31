@@ -130,7 +130,3 @@ python ExactReads_For_Chimera.py
    - Verify RNA regions are correctly specified
    - Check strand orientation matches biological reality
    - Ensure sufficient sequencing depth
-
-3. **Empty Output Files**:
-   - Confirm seqtk is installed and path is correct
-   - Check disk space and write permissions
