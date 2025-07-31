@@ -1,4 +1,4 @@
-# Chimera Exact Reads Tool - README
+# Chimera Exact Reads Tool
 
 ## Overview
 This tool identifies and extracts chimeric RNA reads that span two specific genomic regions (RNA1 and RNA2) from RNA-seq data. It processes BAM files to identify chimeric reads and extracts their sequences from FASTQ files using seqtk.
