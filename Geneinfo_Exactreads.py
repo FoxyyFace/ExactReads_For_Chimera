@@ -148,6 +148,29 @@ class GeneInfo:
 
 class ReadIndex:
     """高效二进制索引系统，用于快速查询read比对信息"""
+    """
+    # 这里构建的是组合索引，https://developer.aliyun.com/article/841106
+    # 这里的Struct和C语言的类似，用于定义数据类型，大小和字节序，和C语言不同的是，它是用于操作二进制数据的工具，而非创造一个数据类型变量
+    # python 通过struct.pack生成一个bytes对象，unpack解包后得到元组tuple，通过索引访问
+    # 是用于处理特定格式的二进制文件
+    """
+    """  
+    # 索引文件头结构
+    # 定义文件开头（head）数据块的格式  # 4SBIIQ请参考struct的格式字符定义，说明了head的C 数据块格式
+    # < 代表小端序 (Little-endian)， 表示后面这些字节数据采用小端字节序
+    # 小端代表低位字节存放在小地址，符合计算机读取内存的方式（效率更高），但是和人类阅读习惯相反
+    # https://www.cnblogs.com/gremount/p/8830707.html 这篇文章很形象地说明了
+    # https://docs.python.org/zh-cn/3/library/struct.html 这是python对于Struct的中文文档
+    # 用C语言结构体表示如下：
+    # struct {
+    #     char magic[4];     // 'R' 'I' 'D' 'X'
+    #     uint8_t version;   // 版本号 (1)
+    #     uint32_t chrom_count; // 染色体数量
+    #     uint32_t read_count;  // 总reads数
+    #     uint64_t chrom_offset; // 染色体表偏移量
+    # } header;
+    """
+    
     # 文件格式版本
     INDEX_VERSION = 1
     
