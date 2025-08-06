@@ -34,7 +34,7 @@ logging.info(f"Index search threads per sample: {INDEX_SEARCH_THREADS}")
 logging.info(f"Max concurrent samples: {SAMPLE_PROCESS_POOL}")
 
 # Path configurations
-seqtk_path = "/storage2/caopengboLab/yanfeihang/JingyuZhang/software/seqtk/seqtk"
+seqtk_path = "/PATH/TO/seqtk/seqtk"
 RNA1 = {
     "name": "EFV83_RS15570:EFV83_RS15625",
     "type": "IGR",
@@ -51,14 +51,14 @@ SAMPLE_GROUPS = {
     ("Mabin-2-LHF18431_L5", "MabcoPA14_IN"),
     ("Mabin-3-LHF18432_L5", "MabcoPA14_IN")
 }
-GFF_FILE = "/storage2/caopengboLab/yanfeihang/JingyuZhang/co_culture/Mab_PA14_results/PA14_Mab.gff"
-BAM_DIR = "/storage2/caopengboLab/yanfeihang/JingyuZhang/co_culture/250629-LH00209B"
+GFF_FILE = "/PATH/TO/PA14_Mab.gff"
+BAM_DIR = "/PATH/TO/250629-LH00209B"    # 存放bam文件和fastq文件的目录
 FASTQ_BAM_PREFIX = "trimmed_"
 OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Output format
-OUTPUT_FORMAT = "fasta"
+OUTPUT_FORMAT = "fasta"    # 或者fastq
 
 # ###########################
 # Core Functions
