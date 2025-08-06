@@ -129,4 +129,3 @@ python ExactReads_For_Chimera.py
 2. **No Chimeric Reads Found**:
    - Verify RNA regions are correctly specified
    - Check strand orientation matches biological reality
-   - Ensure sufficient sequencing depth
