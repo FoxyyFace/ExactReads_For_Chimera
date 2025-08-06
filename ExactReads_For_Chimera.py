@@ -37,7 +37,7 @@ logging.info(f"Max concurrent samples: {SAMPLE_PROCESS_POOL}")
 seqtk_path = "/PATH/TO/seqtk/seqtk"
 RNA1 = {
     "name": "EFV83_RS15570:EFV83_RS15625",
-    "type": "IGR",
+    "type": "IGR",    # gene, IGR, 5UTR, 3UTR
     "strand": 0
 }
 RNA2 = {
@@ -47,7 +47,7 @@ RNA2 = {
 }
 UTR_LENGTH = 150
 SAMPLE_GROUPS = {
-    ("Mabin-1-LHF18430_L5", "MabcoPA14_IN"),
+    ("Mabin-1-LHF18430_L5", "MabcoPA14_IN"),    # (sample.name, group)
     ("Mabin-2-LHF18431_L5", "MabcoPA14_IN"),
     ("Mabin-3-LHF18432_L5", "MabcoPA14_IN")
 }
