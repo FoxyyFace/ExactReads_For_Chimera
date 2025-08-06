@@ -148,42 +148,19 @@ class GeneInfo:
 
 class ReadIndex:
     """高效二进制索引系统，用于快速查询read比对信息"""
-    """
-    # 这里构建的是组合索引，https://developer.aliyun.com/article/841106
-    # 这里的Struct和C语言的类似，用于定义数据类型，大小和字节序，和C语言不同的是，它是用于操作二进制数据的工具，而非创造一个数据类型变量
-    # python 通过struct.pack生成一个bytes对象，unpack解包后得到元组tuple，通过索引访问
-    # 是用于处理特定格式的二进制文件
-    """
-    """  
-    # 索引文件头结构
-    # 定义文件开头（head）数据块的格式  # 4SBIIQ请参考struct的格式字符定义，说明了head的C 数据块格式
-    # < 代表小端序 (Little-endian)， 表示后面这些字节数据采用小端字节序
-    # 小端代表低位字节存放在小地址，符合计算机读取内存的方式（效率更高），但是和人类阅读习惯相反
-    # https://www.cnblogs.com/gremount/p/8830707.html 这篇文章很形象地说明了
-    # https://docs.python.org/zh-cn/3/library/struct.html 这是python对于Struct的中文文档
-    # 用C语言结构体表示如下：
-    # struct {
-    #     char magic[4];     // 'R' 'I' 'D' 'X'
-    #     uint8_t version;   // 版本号 (1)
-    #     uint32_t chrom_count; // 染色体数量
-    #     uint32_t read_count;  // 总reads数
-    #     uint64_t chrom_offset; // 染色体表偏移量
-    # } header;
-    """
-    
     # 文件格式版本
     INDEX_VERSION = 1
     
     # 索引文件头结构
     HEADER_FORMAT = struct.Struct('<4sBIIQ')
-    HEADER_MAGIC = b'RIDX'  # 这里声明了索引文件的RIDX，用于程序识别是否可以处理某种类型的文件（magic number）
+    HEADER_MAGIC = b'RIDX'  # 索引文件标识
     
     # 染色体映射结构
     CHROM_MAP_FORMAT = struct.Struct('<I')
     
     # Read条目结构
     READ_HEADER_FORMAT = struct.Struct('<H')  # read ID长度 (2字节)
-    SEGMENT_FORMAT = struct.Struct('<I B II')   # chrom_id, start, end (各4字节), strand (1字节), 3字节填充
+    SEGMENT_FORMAT = struct.Struct('<I B II')   # chrom_id, strand, start, end
     
     @staticmethod
     def build_index(bam_file, index_file, num_threads=4, bam_threads=4, chunk_size=50000):
@@ -207,7 +184,7 @@ class ReadIndex:
         chrom_map = {}
         chrom_reverse_map = {}
         
-        # 从BAM头部获取染色体信息（使用多线程读取）
+        # 从BAM头部获取染色体信息
         with pysam.AlignmentFile(bam_file, "rb", threads=bam_threads) as bam:
             for i, chrom in enumerate(bam.references):
                 chrom_map[chrom] = i
@@ -218,7 +195,7 @@ class ReadIndex:
         os.makedirs(temp_dir, exist_ok=True)
         
         # 第一步：主线程读取BAM文件并生成任务队列
-        task_queue = queue.Queue(maxsize=num_threads * 8)  # 增大队列大小 # FIFO 先进先出队列
+        task_queue = queue.Queue(maxsize=num_threads * 8)
         error_flag = threading.Event()  # 错误标志
         lock = threading.Lock()  # 用于保护共享变量
         chunk_files = []
@@ -235,14 +212,12 @@ class ReadIndex:
                             continue
                         
                         # 收集当前read的所有segment
-                        # current_chunk[-1]: 获取 current_chunk 列表中的最后一个元素（即最近添加的 read）
-                        # current_chunk[-1][0]: 获取这个最后一个 read 的 query_name
                         if not current_chunk or seg.query_name != current_chunk[-1][0]: 
-                            current_chunk.append((seg.query_name, []))  # 为新read在列表中创建一个新tuple(query_name,[]),[]用于存放该read的全部segments
+                            current_chunk.append((seg.query_name, []))
                             current_count += 1
                         
-                        chrom_id = chrom_map.get(seg.reference_name, 0xFFFFFFFF)    # 转化chrid为整数，chrom_map在上面已经把所有map情况都记录为dict了
-                        # 添加seg信息到上面最后构建的read中，保存在tuple的第二位元素（第一位是ID），也就是上面的[]列表
+                        chrom_id = chrom_map.get(seg.reference_name, 0xFFFFFFFF)
+                        # 添加seg信息
                         current_chunk[-1][1].append((
                             chrom_id,
                             0 if not seg.is_reverse else 1,
@@ -285,15 +260,14 @@ class ReadIndex:
                         break
 
                     # 处理数据块
-                    # 这里使用lock很重要，否则遇见并发访问会导致数据损坏或者报错
                     with lock:
                         chunk_file = os.path.join(temp_dir, f"chunk_{chunk_index}.dat")
                         chunk_index += 1
                     
-                    ReadIndex._process_chunk(current_chunk,     chrom_map, chunk_file)
+                    ReadIndex._process_chunk(current_chunk, chrom_map, chunk_file)
                     
                     with lock:
-                        chunk_files.append(chunk_file)  # 将成功生成的临时文件路径 chunk_file 添加到共享列表 chunk_files 中
+                        chunk_files.append(chunk_file)
                 except queue.Empty:
                     # 检查错误标志
                     if error_flag.is_set():
@@ -308,16 +282,16 @@ class ReadIndex:
         # 创建消费者线程池
         consumer_threads = []
         for _ in range(num_threads):
-            t = threading.Thread(target=consumer)   # 为每个线程创建 consumer 函数的实例
-            t.start()   # 启动线程，开始执行 consumer() 函数
-            consumer_threads.append(t)  # 将线程对象保存到列表中，用于后续 join
+            t = threading.Thread(target=consumer)
+            t.start()
+            consumer_threads.append(t)
         
         # 等待生产者完成
-        producer_thread.join()  # 主线程在此阻塞，直到生产者线程完全退出（包括发送完所有 None）
+        producer_thread.join()
         
         # 等待消费者完成
         for t in consumer_threads:
-            t.join()    # 主线程依次等待每个消费者线程完成它们的处理和退出
+            t.join()
         
         # 检查错误
         if error_flag.is_set():
@@ -343,24 +317,35 @@ class ReadIndex:
                     0,  # 占位符 (后续更新read计数)
                     0   # 占位符 (后续更新文件偏移)
                 )
-                idx_file.write(header)  # 将 21 字节（4+1+4+4+8）的头写入文件起始位置
+                idx_file.write(header)
                 
                 # 写入染色体映射表
-                chrom_offset = idx_file.tell()  # tell() 返回当前文件指针的字节偏移量，也就是读取染色体名字需要从文件的第几个字节开始
+                chrom_offset = idx_file.tell()
                 for chrom, id in chrom_map.items():
-                    chrom_bytes = chrom.encode('utf-8') # 将染色体名称（字符串）转换为 UTF-8编码的字节串
-                    idx_file.write(ReadIndex.CHROM_MAP_FORMAT.pack(len(chrom_bytes)))   # 写入染色体长度
-                    idx_file.write(chrom_bytes) # 写入染色体ID，其对应的序号，需要在读取时重建，节省空间（虽然也节省不了多少，重建时间也是忽略不计的，无所谓是否记录）
+                    chrom_bytes = chrom.encode('utf-8')
+                    idx_file.write(ReadIndex.CHROM_MAP_FORMAT.pack(len(chrom_bytes)))
+                    idx_file.write(chrom_bytes)
                 
                 # 合并所有分片
                 data_offset = idx_file.tell()
+                
+                # 写入数据块头：总read数
+                idx_file.write(struct.pack('Q', 0))  # 占位，稍后更新
+                
+                # 合并所有chunk文件
                 for chunk_file in chunk_files:
                     with open(chunk_file, "rb") as cf:
-                        shutil.copyfileobj(cf, idx_file)    # 高效复制
-                    # 记录每个分片的read数量
-                    with open(chunk_file, "rb") as cf:
-                        chunk_reads = struct.unpack('Q', cf.read(8))[0] # 解包读取前8个字节，并解释为一个Q（unsigned long long (64位整数)），读取解包获得的tuple的第一个[0]元素
+                        # 读取chunk文件头（read数量）
+                        chunk_reads = struct.unpack('Q', cf.read(8))[0]
                         total_reads += chunk_reads
+                        # 复制read数据
+                        shutil.copyfileobj(cf, idx_file)
+                
+                # 更新数据块头的总read数
+                end_pos = idx_file.tell()
+                idx_file.seek(data_offset)
+                idx_file.write(struct.pack('Q', total_reads))
+                idx_file.seek(end_pos)
                 
                 # 更新文件头
                 idx_file.seek(0)
@@ -398,20 +383,20 @@ class ReadIndex:
         try:
             with open(output_file, "wb") as f:
                 # 写入块头：块中的read数量
-                f.write(struct.pack('Q', len(chunk_data)))  # pack 这个块的reads为8个字节的二进制
+                f.write(struct.pack('Q', len(chunk_data)))
                 
                 for read_id, segments in chunk_data:
                     # 写入read ID
-                    id_bytes = read_id.encode('utf-8')  # 转化为UTF-8编码的字节串，这里是后面如果需要优化提取的速率，可以优化的地方
-                    f.write(ReadIndex.READ_HEADER_FORMAT.pack(len(id_bytes)))   # 使用预定义的格式，将 ID的 长度 打包成 2 个字节（<H）
-                    f.write(id_bytes)   # 写入ID,指导ID的长度和ID的字节内容，就可以完美还原ID了
+                    id_bytes = read_id.encode('utf-8')
+                    f.write(ReadIndex.READ_HEADER_FORMAT.pack(len(id_bytes)))
+                    f.write(id_bytes)
                     
                     # 写入segment数量
-                    f.write(struct.pack('B', len(segments)))    # 这个通常不会太大，一个字节应该够了（B）
+                    f.write(struct.pack('B', len(segments)))
                     
                     # 写入每个segment
                     for seg in segments:
-                        f.write(ReadIndex.SEGMENT_FORMAT.pack(*seg))    # 使用预定义的格式（'<I B II'），打包四个整数为连续的字节串
+                        f.write(ReadIndex.SEGMENT_FORMAT.pack(*seg))
         except Exception as e:
             # 删除可能损坏的文件
             if os.path.exists(output_file):
@@ -456,12 +441,18 @@ class ReadIndex:
             chrom_map[chrom_name] = chrom_id
             chrom_reverse_map[chrom_id] = chrom_name
         
+        # 数据块起始位置
+        data_offset = pos
+        # 读取总read数
+        total_reads = struct.unpack_from('Q', mm, data_offset)[0]
+        data_offset += 8  # 跳过8字节的read计数头
+        
         return {
             'mmap': mm,
-            'read_count': read_count,
+            'read_count': total_reads,
             'chrom_map': chrom_map,
             'chrom_reverse_map': chrom_reverse_map,
-            'data_offset': pos
+            'data_offset': data_offset
         }
     
     @staticmethod
@@ -509,16 +500,32 @@ class ReadIndex:
             else:
                 # 跳过指定数量的read
                 for _ in range(chunk_size):
+                    # 检查是否超出文件范围
+                    if pos + ReadIndex.READ_HEADER_FORMAT.size > len(mm):
+                        break
+                    
                     # 读取read ID长度
                     id_len = ReadIndex.READ_HEADER_FORMAT.unpack_from(mm, pos)[0]
                     pos += ReadIndex.READ_HEADER_FORMAT.size
                     
+                    # 检查是否超出文件范围
+                    if pos + id_len > len(mm):
+                        break
+                    
                     # 跳过read ID
                     pos += id_len
+                    
+                    # 检查是否超出文件范围
+                    if pos + 1 > len(mm):
+                        break
                     
                     # 读取segment数量
                     seg_count = mm[pos]
                     pos += 1
+                    
+                    # 检查是否超出文件范围
+                    if pos + seg_count * ReadIndex.SEGMENT_FORMAT.size > len(mm):
+                        break
                     
                     # 跳过所有segment
                     pos += seg_count * ReadIndex.SEGMENT_FORMAT.size
@@ -535,15 +542,39 @@ class ReadIndex:
             pos = start
             
             while pos < end:
-                # 读取read ID
+                # 检查是否超出文件范围
+                if pos + ReadIndex.READ_HEADER_FORMAT.size > end:
+                    break
+                
+                # 读取read ID长度
                 id_len = ReadIndex.READ_HEADER_FORMAT.unpack_from(mm, pos)[0]
                 pos += ReadIndex.READ_HEADER_FORMAT.size
-                read_id = mm[pos:pos+id_len].decode('utf-8')
+                
+                # 检查是否超出文件范围
+                if pos + id_len > end:
+                    break
+                
+                # 读取read ID
+                try:
+                    read_id = mm[pos:pos+id_len].decode('utf-8')
+                except UnicodeDecodeError:
+                    # 使用错误处理机制替换无效字节
+                    read_id = mm[pos:pos+id_len].decode('utf-8', errors='replace')
+                    logging.warning(f"Invalid UTF-8 sequence in read ID at position {pos}, using replacement characters")
+                
                 pos += id_len
+                
+                # 检查是否超出文件范围
+                if pos + 1 > end:
+                    break
                 
                 # 读取segment数量
                 seg_count = mm[pos]
                 pos += 1
+                
+                # 检查是否超出文件范围
+                if pos + seg_count * ReadIndex.SEGMENT_FORMAT.size > end:
+                    break
                 
                 # 读取所有segment
                 segments = []
